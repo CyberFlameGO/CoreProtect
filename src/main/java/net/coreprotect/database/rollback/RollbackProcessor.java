@@ -94,7 +94,7 @@ public class RollbackProcessor {
 
                 List<Object> meta = null;
                 if (rowMeta != null) {
-                    meta = Rollback.deserializeMetadata(rowMeta);
+                    meta = RollbackUtil.deserializeMetadata(rowMeta);
                 }
 
                 BlockData blockData = null;
@@ -169,7 +169,7 @@ public class RollbackProcessor {
                     }
                 }
                 else if (rowAction == 3) { // entity kill
-                    entityCount += RollbackEntityHandler.processEntity(row, rollbackType, finalUserString, rowTypeRaw, rowData, rowAction, MaterialUtils.rolledBack((Integer) row[9], false), rowX, rowY, rowZ, rowWorldId, (Integer) row[2], rowUser);
+                    entityCount += RollbackEntityHandler.processEntity(row, rollbackType, finalUserString, oldTypeRaw, rowTypeRaw, rowData, rowAction, MaterialUtils.rolledBack((Integer) row[9], false), rowX, rowY, rowZ, rowWorldId, (Integer) row[2], rowUser);
                 }
                 else {
                     String world = WorldUtils.getWorldName(rowWorldId);
