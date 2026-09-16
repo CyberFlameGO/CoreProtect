@@ -1,6 +1,5 @@
 package net.coreprotect.database.rollback;
 
-import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +17,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.BannerMeta;
@@ -31,13 +31,15 @@ import org.bukkit.inventory.meta.MapMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.inventory.meta.SuspiciousStewMeta;
 import org.bukkit.potion.PotionEffect;
-import org.bukkit.util.io.BukkitObjectInputStream;
 
 import net.coreprotect.bukkit.BukkitAdapter;
 import net.coreprotect.consumer.Queue;
 import net.coreprotect.database.Lookup;
+import net.coreprotect.database.statement.BlockStatement;
 import net.coreprotect.model.BlockGroup;
+import net.coreprotect.utility.AttributeUtils;
 import net.coreprotect.utility.ItemUtils;
+import net.coreprotect.utility.ErrorReporter;
 
 public class RollbackUtil extends Lookup {
 
@@ -93,7 +95,16 @@ public class RollbackUtil extends Lookup {
                 }
             }
             else if (type != null && type.equals(Material.JUKEBOX)) {
-                Jukebox jukebox = (Jukebox) container;
+                Jukebox jukebox = null;
+                if (container instanceof Jukebox) {
+                    jukebox = (Jukebox) container;
+                }
+                else if (container instanceof Inventory) {
+                    InventoryHolder holder = ((Inventory) container).getHolder();
+                    if (holder instanceof Jukebox) {
+                        jukebox = (Jukebox) holder;
+                    }
+                }
                 if (jukebox != null) {
                     if (action == 1 && itemstack.getType().name().startsWith("MUSIC_DISC")) {
                         itemstack.setAmount(1);
@@ -220,7 +231,7 @@ public class RollbackUtil extends Lookup {
             }
         }
         catch (Exception e) {
-            e.printStackTrace();
+            ErrorReporter.report(e);
         }
 
         return modifiedArmor;
@@ -251,7 +262,7 @@ public class RollbackUtil extends Lookup {
             inventory.setStorageContents(storageContents);
         }
         catch (Exception e) {
-            e.printStackTrace();
+            ErrorReporter.report(e);
         }
     }
 
@@ -270,7 +281,7 @@ public class RollbackUtil extends Lookup {
             }
         }
         catch (Exception e) {
-            e.printStackTrace();
+            ErrorReporter.report(e);
         }
     }
 
@@ -352,19 +363,12 @@ public class RollbackUtil extends Lookup {
                         Map<Object, Map<String, Object>> modifiersMap = (Map<Object, Map<String, Object>>) item;
                         for (Map.Entry<Object, Map<String, Object>> entry : modifiersMap.entrySet()) {
                             try {
-                                Attribute attribute = null;
-                                if (entry.getKey() instanceof Attribute) {
-                                    attribute = (Attribute) entry.getKey();
-                                }
-                                else {
-                                    attribute = (Attribute) BukkitAdapter.ADAPTER.getRegistryValue((String) entry.getKey(), Attribute.class);
-                                }
-
+                                Attribute attribute = AttributeUtils.resolve(entry.getKey());
                                 AttributeModifier modifier = AttributeModifier.deserialize(entry.getValue());
                                 itemMeta.addAttributeModifier(attribute, modifier);
                             }
                             catch (IllegalArgumentException e) {
-                                // AttributeModifier already exists
+                                // Attribute is unavailable or the modifier cannot be applied.
                             }
                         }
                     }
@@ -469,28 +473,14 @@ public class RollbackUtil extends Lookup {
             }
         }
         catch (Exception e) {
-            e.printStackTrace();
+            ErrorReporter.report(e);
         }
         return new Object[] { slot, faceData, itemstack };
     }
 
     public static Object[] populateItemStack(ItemStack itemstack, byte[] metadata) {
-        if (metadata != null) {
-            try {
-                ByteArrayInputStream metaByteStream = new ByteArrayInputStream(metadata);
-                BukkitObjectInputStream metaObjectStream = new BukkitObjectInputStream(metaByteStream);
-                Object metaList = metaObjectStream.readObject();
-                metaObjectStream.close();
-                metaByteStream.close();
-
-                return populateItemStack(itemstack, metaList);
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        return new Object[] { 0, "", itemstack };
+        List<Object> metaList = deserializeMetadata(metadata);
+        return metaList == null ? new Object[] { 0, "", itemstack } : populateItemStack(itemstack, metaList);
     }
 
     /**
@@ -501,23 +491,7 @@ public class RollbackUtil extends Lookup {
      * @return The deserialized list of objects or null if deserialization fails
      */
     public static List<Object> deserializeMetadata(byte[] metadata) {
-        if (metadata == null) {
-            return null;
-        }
-
-        try {
-            ByteArrayInputStream metaByteStream = new ByteArrayInputStream(metadata);
-            BukkitObjectInputStream metaObjectStream = new BukkitObjectInputStream(metaByteStream);
-            @SuppressWarnings("unchecked")
-            List<Object> metaList = (List<Object>) metaObjectStream.readObject();
-            metaObjectStream.close();
-            metaByteStream.close();
-            return metaList;
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
+        return BlockStatement.deserializeMetadata(metadata);
     }
 
     /**
